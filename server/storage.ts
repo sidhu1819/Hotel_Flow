@@ -1,26 +1,43 @@
-import { randomUUID } from "crypto";
-import type {
-  Room,
-  InsertRoom,
-  Guest,
-  InsertGuest,
-  Booking,
-  InsertBooking,
-  BookingWithDetails,
-  Service,
-  InsertService,
-  BillItem,
-  InsertBillItem,
-  Bill,
-  InsertBill,
-  BillWithDetails,
+import { db } from "./db"; // Our new database client
+import {
+  type Room,
+  type InsertRoom,
+  type Guest,
+  type InsertGuest,
+  type Booking,
+  type InsertBooking,
+  type BookingWithDetails,
+  type Service,
+  type InsertService,
+  type BillItem,
+  type InsertBillItem,
+  type Bill,
+  type InsertBill,
+  type BillWithDetails,
+  type User,           // <-- Added
+  type InsertUser,       // <-- Added
+  rooms,
+  guests,
+  bookings,
+  services,
+  billItems,
+  bills,
+  users,                // <-- Added
 } from "@shared/schema";
+import { and, eq, desc, gte, lt } from "drizzle-orm";
 
+// The original interface (we must implement all of these)
 export interface IStorage {
   getRooms(): Promise<Room[]>;
   getRoom(id: string): Promise<Room | undefined>;
   createRoom(room: InsertRoom): Promise<Room>;
   updateRoomStatus(id: string, status: string): Promise<Room | undefined>;
+
+  // --- User Methods ---
+  getUsers(): Promise<User[]>;
+  getUserByUsername(username: string): Promise<User | undefined>;
+  createUser(user: InsertUser): Promise<User>;
+  // --------------------
 
   getGuests(): Promise<Guest[]>;
   getGuest(id: string): Promise<Guest | undefined>;
@@ -44,185 +61,185 @@ export interface IStorage {
   updateBill(id: string, updates: Partial<Bill>): Promise<Bill | undefined>;
 }
 
-export class MemStorage implements IStorage {
-  private rooms: Map<string, Room>;
-  private guests: Map<string, Guest>;
-  private bookings: Map<string, Booking>;
-  private services: Map<string, Service>;
-  private bills: Map<string, Bill>;
-  private billItems: Map<string, BillItem>;
-
-  constructor() {
-    this.rooms = new Map();
-    this.guests = new Map();
-    this.bookings = new Map();
-    this.services = new Map();
-    this.bills = new Map();
-    this.billItems = new Map();
-    this.seedData();
-  }
-
-  private seedData() {
-    const rooms: InsertRoom[] = [
-      { number: "101", type: "standard", capacity: 2, pricePerNight: "99.00", floor: 1, amenities: ["WiFi", "TV"], status: "available" },
-      { number: "102", type: "standard", capacity: 2, pricePerNight: "99.00", floor: 1, amenities: ["WiFi", "TV"], status: "available" },
-      { number: "201", type: "deluxe", capacity: 3, pricePerNight: "149.00", floor: 2, amenities: ["WiFi", "TV", "Mini Bar"], status: "available" },
-      { number: "202", type: "deluxe", capacity: 3, pricePerNight: "149.00", floor: 2, amenities: ["WiFi", "TV", "Mini Bar"], status: "available" },
-      { number: "301", type: "suite", capacity: 4, pricePerNight: "249.00", floor: 3, amenities: ["WiFi", "TV", "Mini Bar", "Balcony"], status: "available" },
-    ];
-
-    rooms.forEach(async (room) => await this.createRoom(room));
-
-    const services: InsertService[] = [
-      { name: "Room Service", description: "24/7 room service", price: "25.00", category: "service" },
-      { name: "Spa Treatment", description: "Relaxing spa session", price: "75.00", category: "service" },
-      { name: "Airport Transfer", description: "Airport pickup/drop", price: "50.00", category: "service" },
-    ];
-
-    services.forEach(async (service) => await this.createService(service));
-  }
-
+// Re-implement the IStorage interface using Drizzle
+export class DrizzleStorage implements IStorage {
+  
+  // --- Room Methods ---
   async getRooms(): Promise<Room[]> {
-    return Array.from(this.rooms.values());
+    return db.select().from(rooms);
   }
 
   async getRoom(id: string): Promise<Room | undefined> {
-    return this.rooms.get(id);
+    const result = await db.select().from(rooms).where(eq(rooms.id, id));
+    return result[0];
   }
 
-  async createRoom(insertRoom: InsertRoom): Promise<Room> {
-    const id = randomUUID();
-    const room: Room = { ...insertRoom, id };
-    this.rooms.set(id, room);
-    return room;
+  async createRoom(room: InsertRoom): Promise<Room> {
+    const result = await db.insert(rooms).values(room).returning();
+    return result[0];
   }
 
   async updateRoomStatus(id: string, status: string): Promise<Room | undefined> {
-    const room = this.rooms.get(id);
-    if (room) {
-      room.status = status;
-      this.rooms.set(id, room);
-      return room;
-    }
-    return undefined;
+    const result = await db
+      .update(rooms)
+      .set({ status })
+      .where(eq(rooms.id, id))
+      .returning();
+    return result[0];
   }
 
+  // --- User Methods ---
+  async getUsers(): Promise<User[]> {
+    return db.select().from(users);
+  }
+
+  async getUserByUsername(username: string): Promise<User | undefined> {
+    const result = await db.select().from(users).where(eq(users.username, username));
+    return result[0];
+  }
+
+  async createUser(user: InsertUser): Promise<User> {
+    // In a real app, you MUST hash the password here before saving!
+    // e.g., const hashedPassword = await hash(user.password, 10);
+    // const result = await db.insert(users).values({ ...user, password: hashedPassword }).returning();
+    const result = await db.insert(users).values(user).returning();
+    return result[0];
+  }
+
+  // --- Guest Methods ---
   async getGuests(): Promise<Guest[]> {
-    return Array.from(this.guests.values());
+    return db.select().from(guests);
   }
 
   async getGuest(id: string): Promise<Guest | undefined> {
-    return this.guests.get(id);
+    const result = await db.select().from(guests).where(eq(guests.id, id));
+    return result[0];
   }
 
-  async createGuest(insertGuest: InsertGuest): Promise<Guest> {
-    const id = randomUUID();
-    const guest: Guest = { ...insertGuest, id, createdAt: new Date() };
-    this.guests.set(id, guest);
-    return guest;
+  async createGuest(guest: InsertGuest): Promise<Guest> {
+    const result = await db.insert(guests).values(guest).returning();
+    return result[0];
+  }
+
+  // --- Booking Methods ---
+  private async queryBookingsWithDetails(
+    conditions?: any,
+  ): Promise<BookingWithDetails[]> {
+    return db
+      .select()
+      .from(bookings)
+      .innerJoin(guests, eq(bookings.guestId, guests.id))
+      .innerJoin(rooms, eq(bookings.roomId, rooms.id))
+      .where(conditions)
+      .orderBy(desc(bookings.createdAt))
+      .then((results) =>
+        results.map((r) => ({
+          ...r.bookings,
+          guest: r.guests,
+          room: r.rooms,
+        })),
+      );
   }
 
   async getBookings(): Promise<BookingWithDetails[]> {
-    const bookings = Array.from(this.bookings.values());
-    return Promise.all(
-      bookings.map(async (booking) => {
-        const guest = await this.getGuest(booking.guestId);
-        const room = await this.getRoom(booking.roomId);
-        return {
-          ...booking,
-          guest: guest!,
-          room: room!,
-        };
-      })
-    );
+    return this.queryBookingsWithDetails();
   }
 
   async getBooking(id: string): Promise<BookingWithDetails | undefined> {
-    const booking = this.bookings.get(id);
-    if (!booking) return undefined;
-
-    const guest = await this.getGuest(booking.guestId);
-    const room = await this.getRoom(booking.roomId);
-
-    if (!guest || !room) return undefined;
-
-    return {
-      ...booking,
-      guest,
-      room,
-    };
+    const result = await this.queryBookingsWithDetails(eq(bookings.id, id));
+    return result[0];
   }
 
   async getBookingsByStatus(status: string): Promise<BookingWithDetails[]> {
-    const allBookings = await this.getBookings();
-    return allBookings.filter((booking) => booking.status === status);
+    return this.queryBookingsWithDetails(eq(bookings.status, status));
   }
 
   async getRecentBookings(limit: number): Promise<BookingWithDetails[]> {
-    const allBookings = await this.getBookings();
-    return allBookings
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-      .slice(0, limit);
+    return db
+      .select()
+      .from(bookings)
+      .innerJoin(guests, eq(bookings.guestId, guests.id))
+      .innerJoin(rooms, eq(bookings.roomId, rooms.id))
+      .orderBy(desc(bookings.createdAt))
+      .limit(limit)
+      .then((results) =>
+        results.map((r) => ({
+          ...r.bookings,
+          guest: r.guests,
+          room: r.rooms,
+        })),
+      );
   }
 
   async getTodayCheckIns(): Promise<BookingWithDetails[]> {
-    const allBookings = await this.getBookings();
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
 
-    return allBookings.filter((booking) => {
-      const checkIn = new Date(booking.checkInDate);
-      checkIn.setHours(0, 0, 0, 0);
-      return checkIn.getTime() === today.getTime() && booking.status === "reserved";
-    });
+    return this.queryBookingsWithDetails(
+      and(
+        eq(bookings.status, "reserved"),
+        gte(bookings.checkInDate, today),
+        lt(bookings.checkInDate, tomorrow),
+      ),
+    );
   }
 
-  async createBooking(insertBooking: InsertBooking): Promise<Booking> {
-    const id = randomUUID();
-    const booking: Booking = { ...insertBooking, id, createdAt: new Date() };
-    this.bookings.set(id, booking);
+  async createBooking(booking: InsertBooking): Promise<Booking> {
+    const result = await db.insert(bookings).values(booking).returning();
     await this.updateRoomStatus(booking.roomId, "reserved");
+    return result[0];
+  }
+
+  async updateBookingStatus(
+    id: string,
+    status: string,
+  ): Promise<Booking | undefined> {
+    const result = await db
+      .update(bookings)
+      .set({ status })
+      .where(eq(bookings.id, id))
+      .returning();
+    
+    const booking = result[0];
+    if (!booking) return undefined;
+
+    if (status === "checked-in") {
+      await this.updateRoomStatus(booking.roomId, "occupied");
+    } else if (status === "checked-out") {
+      await this.updateRoomStatus(booking.roomId, "available");
+    }
+
     return booking;
   }
 
-  async updateBookingStatus(id: string, status: string): Promise<Booking | undefined> {
-    const booking = this.bookings.get(id);
-    if (booking) {
-      booking.status = status;
-      this.bookings.set(id, booking);
-
-      if (status === "checked-in") {
-        await this.updateRoomStatus(booking.roomId, "occupied");
-      } else if (status === "checked-out") {
-        await this.updateRoomStatus(booking.roomId, "available");
-      }
-
-      return booking;
-    }
-    return undefined;
-  }
-
+  // --- Service Methods ---
   async getServices(): Promise<Service[]> {
-    return Array.from(this.services.values());
+    return db.select().from(services);
   }
 
-  async createService(insertService: InsertService): Promise<Service> {
-    const id = randomUUID();
-    const service: Service = { ...insertService, id };
-    this.services.set(id, service);
-    return service;
+  async createService(service: InsertService): Promise<Service> {
+    const result = await db.insert(services).values(service).returning();
+    return result[0];
   }
 
-  async getBillByBookingId(bookingId: string): Promise<BillWithDetails | undefined> {
-    const bill = Array.from(this.bills.values()).find((b) => b.bookingId === bookingId);
+  // --- Billing Methods ---
+  async getBillByBookingId(
+    bookingId: string,
+  ): Promise<BillWithDetails | undefined> {
+    const billResult = await db
+      .select()
+      .from(bills)
+      .where(eq(bills.bookingId, bookingId));
+    
+    const bill = billResult[0];
     if (!bill) return undefined;
 
     const booking = await this.getBooking(bookingId);
-    const items = await this.getBillItems(bookingId);
+    if (!booking) return undefined; 
 
-    if (!booking) return undefined;
+    const items = await this.getBillItems(bookingId);
 
     return {
       ...bill,
@@ -231,33 +248,59 @@ export class MemStorage implements IStorage {
     };
   }
 
-  async createBill(insertBill: InsertBill): Promise<Bill> {
-    const id = randomUUID();
-    const bill: Bill = { ...insertBill, id, createdAt: new Date() };
-    this.bills.set(id, bill);
-    return bill;
+  async createBill(bill: InsertBill): Promise<Bill> {
+    const result = await db.insert(bills).values(bill).returning();
+    return result[0];
   }
 
-  async addBillItem(insertItem: InsertBillItem): Promise<BillItem> {
-    const id = randomUUID();
-    const item: BillItem = { ...insertItem, id };
-    this.billItems.set(id, item);
-    return item;
+  async addBillItem(item: InsertBillItem): Promise<BillItem> {
+    const result = await db.insert(billItems).values(item).returning();
+    return result[0];
   }
 
   async getBillItems(bookingId: string): Promise<BillItem[]> {
-    return Array.from(this.billItems.values()).filter((item) => item.bookingId === bookingId);
+    return db.select().from(billItems).where(eq(billItems.bookingId, bookingId));
   }
 
-  async updateBill(id: string, updates: Partial<Bill>): Promise<Bill | undefined> {
-    const bill = this.bills.get(id);
-    if (bill) {
-      Object.assign(bill, updates);
-      this.bills.set(id, bill);
-      return bill;
-    }
-    return undefined;
+  async updateBill(
+    id: string,
+    updates: Partial<Bill>,
+  ): Promise<Bill | undefined> {
+    const result = await db
+      .update(bills)
+      .set(updates)
+      .where(eq(bills.id, id))
+      .returning();
+    return result[0];
   }
 }
 
-export const storage = new MemStorage();
+// Export an instance of our new DrizzleStorage
+export const storage = new DrizzleStorage();
+
+// Seed some data if the database is empty (optional)
+// We need to check if services exist first, otherwise seeding them every time
+// will create duplicates.
+async function seedData() {
+  const existingServices = await storage.getServices();
+  if (existingServices.length === 0) {
+    console.log("Seeding services...");
+    const servicesToSeed: InsertService[] = [
+      { name: "Room Service", description: "24/7 room service", price: "25.00", category: "service" },
+      { name: "Spa Treatment", description: "Relaxing spa session", price: "75.00", category: "service" },
+      { name: "Airport Transfer", description: "Airport pickup/drop", price: "50.00", category: "service" },
+    ];
+    for (const service of servicesToSeed) {
+      await storage.createService(service);
+    }
+  }
+
+  // You might also want to seed a default room or admin user here
+  const existingUsers = await storage.getUsers();
+  if (existingUsers.length === 0) {
+    console.log("Seeding default admin user...");
+    await storage.createUser({ username: "admin", password: "admin123", role: "admin" });
+  }
+}
+
+seedData().catch(console.error);

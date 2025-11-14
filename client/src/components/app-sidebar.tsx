@@ -6,6 +6,7 @@ import {
   UserCheck,
   Receipt,
   Settings,
+  LogOut,
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import {
@@ -22,6 +23,7 @@ import {
 } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "./theme-toggle";
+import { useAuth } from "@/hooks/use-auth";
 
 const menuItems = [
   {
@@ -57,7 +59,13 @@ const menuItems = [
 ];
 
 export function AppSidebar() {
-  const [location] = useLocation();
+  const [location, navigate] = useLocation();
+  const { user, logout } = useAuth();
+
+  const handleLogout = () => {
+    logout();
+    navigate("/login");
+  };
 
   return (
     <Sidebar>
@@ -94,13 +102,33 @@ export function AppSidebar() {
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
+        {user && (
+          <SidebarGroup>
+            <SidebarGroupLabel>Account</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <div className="px-2 py-2 text-sm">
+                <p className="font-medium">{user.username}</p>
+                <p className="text-xs text-muted-foreground capitalize">{user.role}</p>
+              </div>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
       </SidebarContent>
       <SidebarFooter className="p-5">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2 w-full">
           <Button variant="ghost" size="icon" data-testid="button-settings">
             <Settings className="h-5 w-5" />
           </Button>
           <ThemeToggle />
+          <Button 
+            variant="ghost" 
+            size="icon" 
+            onClick={handleLogout}
+            title="Logout"
+            className="ml-auto"
+          >
+            <LogOut className="h-5 w-5" />
+          </Button>
         </div>
       </SidebarFooter>
     </Sidebar>

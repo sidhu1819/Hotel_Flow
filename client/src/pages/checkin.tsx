@@ -4,14 +4,7 @@ import { UserCheck, UserX, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { StatusBadge } from "@/components/status-badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -57,15 +50,23 @@ export default function CheckIn() {
     },
   });
 
-  const filteredReserved = reservedBookings?.filter((booking) =>
-    `${booking.guest.firstName} ${booking.guest.lastName}`.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    booking.room.number.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  // Safe filtering for reserved bookings
+  const filteredReserved = reservedBookings?.filter((booking) => {
+    const guestName = booking.guest ? `${booking.guest.firstName ?? ''} ${booking.guest.lastName ?? ''}` : '';
+    const roomNumber = booking.room?.number ?? '';
+    const searchLower = searchQuery.toLowerCase();
 
-  const filteredCheckedIn = checkedInBookings?.filter((booking) =>
-    `${booking.guest.firstName} ${booking.guest.lastName}`.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    booking.room.number.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+    return guestName.toLowerCase().includes(searchLower) || roomNumber.toLowerCase().includes(searchLower);
+  });
+
+  // Safe filtering for checked-in bookings
+  const filteredCheckedIn = checkedInBookings?.filter((booking) => {
+    const guestName = booking.guest ? `${booking.guest.firstName ?? ''} ${booking.guest.lastName ?? ''}` : '';
+    const roomNumber = booking.room?.number ?? '';
+    const searchLower = searchQuery.toLowerCase();
+
+    return guestName.toLowerCase().includes(searchLower) || roomNumber.toLowerCase().includes(searchLower);
+  });
 
   return (
     <div className="flex flex-col gap-5 p-5">
@@ -86,6 +87,7 @@ export default function CheckIn() {
           </TabsTrigger>
         </TabsList>
 
+        {/* ------------------- Check-In Tab ------------------- */}
         <TabsContent value="checkin" className="mt-5">
           <Card>
             <CardHeader>
@@ -134,21 +136,24 @@ export default function CheckIn() {
                   </TableHeader>
                   <TableBody>
                     {filteredReserved.map((booking) => {
-                      const nights = Math.ceil(
-                        (new Date(booking.checkOutDate).getTime() - new Date(booking.checkInDate).getTime()) /
-                          (1000 * 60 * 60 * 24)
-                      );
+                      const checkInDate = booking.checkInDate ? new Date(booking.checkInDate) : null;
+                      const checkOutDate = booking.checkOutDate ? new Date(booking.checkOutDate) : null;
+                      const nights =
+                        checkInDate && checkOutDate
+                          ? Math.ceil((checkOutDate.getTime() - checkInDate.getTime()) / (1000 * 60 * 60 * 24))
+                          : 0;
+
                       return (
                         <TableRow key={booking.id} data-testid={`checkin-row-${booking.id}`}>
                           <TableCell className="font-medium">
-                            {booking.guest.firstName} {booking.guest.lastName}
+                            {booking.guest?.firstName ?? ''} {booking.guest?.lastName ?? ''}
                           </TableCell>
                           <TableCell>
-                            <Badge variant="outline">{booking.room.number}</Badge>
+                            <Badge variant="outline">{booking.room?.number ?? 'N/A'}</Badge>
                           </TableCell>
-                          <TableCell>{format(new Date(booking.checkInDate), "MMM d, yyyy")}</TableCell>
+                          <TableCell>{checkInDate ? format(checkInDate, "MMM d, yyyy") : 'N/A'}</TableCell>
                           <TableCell>{nights} {nights === 1 ? "night" : "nights"}</TableCell>
-                          <TableCell>{booking.numberOfGuests}</TableCell>
+                          <TableCell>{booking.numberOfGuests ?? 0}</TableCell>
                           <TableCell>
                             <Button
                               size="sm"
@@ -170,6 +175,7 @@ export default function CheckIn() {
           </Card>
         </TabsContent>
 
+        {/* ------------------- Check-Out Tab ------------------- */}
         <TabsContent value="checkout" className="mt-5">
           <Card>
             <CardHeader>
@@ -219,13 +225,15 @@ export default function CheckIn() {
                     {filteredCheckedIn.map((booking) => (
                       <TableRow key={booking.id} data-testid={`checkout-row-${booking.id}`}>
                         <TableCell className="font-medium">
-                          {booking.guest.firstName} {booking.guest.lastName}
+                          {booking.guest?.firstName ?? ''} {booking.guest?.lastName ?? ''}
                         </TableCell>
                         <TableCell>
-                          <Badge variant="outline">{booking.room.number}</Badge>
+                          <Badge variant="outline">{booking.room?.number ?? 'N/A'}</Badge>
                         </TableCell>
-                        <TableCell>{format(new Date(booking.checkOutDate), "MMM d, yyyy")}</TableCell>
-                        <TableCell>${parseFloat(booking.room.pricePerNight).toFixed(2)}/night</TableCell>
+                        <TableCell>
+                          {booking.checkOutDate ? format(new Date(booking.checkOutDate), "MMM d, yyyy") : 'N/A'}
+                        </TableCell>
+                        <TableCell>${parseFloat(booking.room?.pricePerNight ?? '0').toFixed(2)}/night</TableCell>
                         <TableCell>
                           <Button
                             size="sm"

@@ -3,6 +3,14 @@ import { pgTable, text, varchar, integer, numeric, timestamp, boolean } from "dr
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
+export const users = pgTable("users", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  username: text("username").notNull().unique(),
+  password: text("password").notNull(),
+  role: text("role").notNull().default("staff"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
 export const rooms = pgTable("rooms", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   number: text("number").notNull().unique(),
@@ -71,6 +79,16 @@ export const insertRoomSchema = createInsertSchema(rooms).omit({ id: true }).ext
   floor: z.coerce.number(),
 });
 
+export const insertUserSchema = createInsertSchema(users).omit({ id: true, createdAt: true }).extend({
+  username: z.string().min(3),
+  password: z.string().min(6),
+});
+
+export const loginSchema = z.object({
+  username: z.string().min(3),
+  password: z.string().min(6),
+});
+
 export const insertGuestSchema = createInsertSchema(guests).omit({ id: true, createdAt: true });
 
 export const insertBookingSchema = createInsertSchema(bookings).omit({ id: true, createdAt: true }).extend({
@@ -97,6 +115,9 @@ export const insertBillSchema = createInsertSchema(bills).omit({ id: true, creat
 
 export type Room = typeof rooms.$inferSelect;
 export type InsertRoom = z.infer<typeof insertRoomSchema>;
+export type User = typeof users.$inferSelect;
+export type InsertUser = z.infer<typeof insertUserSchema>;
+export type LoginInput = z.infer<typeof loginSchema>;
 export type Guest = typeof guests.$inferSelect;
 export type InsertGuest = z.infer<typeof insertGuestSchema>;
 export type Booking = typeof bookings.$inferSelect;
