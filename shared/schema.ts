@@ -62,6 +62,7 @@ export const billItems = pgTable("bill_items", {
   category: text("category").notNull(),
 });
 
+
 export const bills = pgTable("bills", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   bookingId: varchar("booking_id").notNull().references(() => bookings.id),
