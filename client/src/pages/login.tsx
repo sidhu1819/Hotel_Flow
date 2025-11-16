@@ -102,14 +102,6 @@ export default function Login() {
           <div className="mt-4 text-sm text-center">
             <a href="/register" className="text-primary">Don't have an account? Register</a>
           </div>
-
-          <div className="mt-6 pt-6 border-t space-y-2">
-            <p className="text-sm text-gray-600 text-center font-semibold">Demo Credentials</p>
-            <div className="text-xs text-gray-500 space-y-1">
-              <p><span className="font-medium">Admin:</span> admin / admin123</p>
-              <p><span className="font-medium">Staff:</span> staff / staff123</p>
-            </div>
-          </div>
         </CardContent>
       </Card>
     </div>
