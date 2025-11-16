@@ -62,7 +62,6 @@ export const billItems = pgTable("bill_items", {
   category: text("category").notNull(),
 });
 
-
 export const bills = pgTable("bills", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   bookingId: varchar("booking_id").notNull().references(() => bookings.id),
@@ -73,6 +72,22 @@ export const bills = pgTable("bills", {
   isPaid: boolean("is_paid").notNull().default(false),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
+
+// --- NEW TABLE for Archived Bills ---
+export const archivedBills = pgTable("archived_bills", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  guestName: text("guest_name").notNull(),
+  phone: text("phone"),
+  roomNumber: text("room_number").notNull(),
+  roomType: text("room_type"),
+  checkInDate: timestamp("check_in_date").notNull(),
+  checkOutDate: timestamp("check_out_date").notNull(),
+  total: numeric("total", { precision: 10, scale: 2 }).notNull(),
+  completedAt: timestamp("completed_at").notNull().defaultNow(),
+});
+
+
+// --- Zod Schemas ---
 
 export const insertRoomSchema = createInsertSchema(rooms).omit({ id: true }).extend({
   pricePerNight: z.string(),
@@ -114,6 +129,8 @@ export const insertBillSchema = createInsertSchema(bills).omit({ id: true, creat
   total: z.string(),
 });
 
+// --- Types ---
+
 export type Room = typeof rooms.$inferSelect;
 export type InsertRoom = z.infer<typeof insertRoomSchema>;
 export type User = typeof users.$inferSelect;
@@ -129,6 +146,11 @@ export type BillItem = typeof billItems.$inferSelect;
 export type InsertBillItem = z.infer<typeof insertBillItemSchema>;
 export type Bill = typeof bills.$inferSelect;
 export type InsertBill = z.infer<typeof insertBillSchema>;
+
+// --- NEW TYPE for Archived Bills ---
+export type ArchivedBill = typeof archivedBills.$inferSelect;
+
+// --- Detailed Types ---
 
 export type BookingWithDetails = Booking & {
   guest: Guest;

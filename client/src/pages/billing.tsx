@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Receipt, Plus, Printer, DollarSign } from "lucide-react";
+import { Receipt, Plus, Printer, DollarSign, CheckCircle } from "lucide-react"; // +++ 1. IMPORTED CheckCircle +++
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import {
@@ -97,6 +97,29 @@ export default function Billing() {
     },
   });
 
+  // +++ 2. ADDED THIS MUTATION +++
+  const completeBillMutation = useMutation({
+    mutationFn: () => {
+      if (!bill) throw new Error("No bill selected");
+      return apiRequest("POST", `/api/bills/${bill.bookingId}/complete`);
+    },
+    onSuccess: () => {
+      // Invalidate all queries that will be affected
+      queryClient.invalidateQueries({ queryKey: ["/api/bills", selectedBookingId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/bookings/checked-out"] }); // Refresh the dropdown
+      queryClient.invalidateQueries({ queryKey: ["/api/bookings"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/rooms"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/archive"] }); // Refresh the new data page
+      
+      toast({ title: "Bill Completed", description: "The bill has been archived and the guest removed." });
+      setSelectedBookingId(""); // Reset the UI
+    },
+    onError: (err: any) => {
+      toast({ title: "Failed to complete bill", description: err.message, variant: "destructive" });
+    },
+  });
+
   const selectedBooking = checkedOutBookings?.find((b) => b.id === selectedBookingId);
 
   const handlePrint = () => {
@@ -179,7 +202,8 @@ export default function Billing() {
                 <CardDescription>Itemized charges and total amount</CardDescription>
               </div>
               {bill && (
-                <div className="flex gap-2">
+                // +++ 3. ADDED 'flex-wrap' FOR RESPONSIVENESS +++
+                <div className="flex gap-2 flex-wrap"> 
                   <Dialog open={addItemDialogOpen} onOpenChange={setAddItemDialogOpen}>
                     <DialogTrigger asChild>
                       <Button variant="outline" size="sm" data-testid="button-add-item">
@@ -284,6 +308,18 @@ export default function Billing() {
                   <Button variant="outline" size="sm" onClick={handlePrint} data-testid="button-print">
                     <Printer className="h-4 w-4 mr-2" />
                     Print
+                  </Button>
+                  
+                  {/* +++ 4. ADDED THIS BUTTON +++ */}
+                  <Button
+                    variant="default"
+                    size="sm"
+                    onClick={() => completeBillMutation.mutate()}
+                    disabled={completeBillMutation.isPending || bill.isPaid}
+                    data-testid="button-complete-bill"
+                  >
+                    <CheckCircle className="h-4 w-4 mr-2" />
+                    {completeBillMutation.isPending ? "Completing..." : "Complete Bill"}
                   </Button>
                 </div>
               )}

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Plus, Search, BedDouble } from "lucide-react";
+import { Plus, Search, BedDouble, MoreHorizontal, Trash, Wrench } from "lucide-react"; // +++ 1. ADDED ICONS +++
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -36,6 +36,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+// +++ 2. ADDED DROPDOWN IMPORTS +++
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { StatusBadge } from "@/components/status-badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useForm } from "react-hook-form";
@@ -79,6 +88,38 @@ export default function Rooms() {
       toast({ title: "Failed to create room", variant: "destructive" });
     },
   });
+
+  // +++ 3. ADDED THESE MUTATIONS +++
+  const updateStatusMutation = useMutation({
+    mutationFn: ({ id, status }: { id: string, status: string }) =>
+      apiRequest("PUT", `/api/rooms/${id}/status`, { status }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/rooms"] });
+      toast({ title: "Room status updated" });
+    },
+    onError: (err: any) => {
+      toast({ title: "Failed to update status", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const deleteRoomMutation = useMutation({
+    mutationFn: (id: string) => apiRequest("DELETE", `/api/rooms/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/rooms"] });
+      toast({ title: "Room deleted successfully" });
+    },
+    onError: (err: any) => {
+      toast({ title: "Failed to delete room", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const handleDeleteRoom = (id: string, number: string) => {
+    // NOTE: Switched to window.confirm as alert() is not available.
+    // For a better experience, you could replace this with shadcn's <AlertDialog>
+    if (window.confirm(`Are you sure you want to permanently delete Room ${number}? This cannot be undone.`)) {
+      deleteRoomMutation.mutate(id);
+    }
+  };
 
   const filteredRooms = rooms?.filter((room) =>
     room.number.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -249,6 +290,8 @@ export default function Rooms() {
                   <TableHead>Capacity</TableHead>
                   <TableHead>Price/Night</TableHead>
                   <TableHead>Status</TableHead>
+                  {/* +++ 4. ADDED ACTIONS HEADER +++ */}
+                  <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -265,6 +308,52 @@ export default function Rooms() {
                     <TableCell>${parseFloat(room.pricePerNight).toFixed(2)}</TableCell>
                     <TableCell>
                       <StatusBadge status={room.status as any} />
+                    </TableCell>
+                    {/* +++ 5. ADDED ACTIONS CELL +++ */}
+                    <TableCell className="text-right">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            disabled={updateStatusMutation.isPending || deleteRoomMutation.isPending}
+                          >
+                            <MoreHorizontal className="h-4 w-4" />
+                            <span className="sr-only">Room Actions</span>
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                          {/* Maintenance Button */}
+                          {room.status === 'available' && (
+                            <DropdownMenuItem onClick={() => updateStatusMutation.mutate({ id: room.id, status: 'maintenance' })}>
+                              <Wrench className="h-4 w-4 mr-2" />
+                              Mark Maintenance
+                            </DropdownMenuItem>
+                          )}
+                          {/* Available Button */}
+                          {room.status === 'maintenance' && (
+                            <DropdownMenuItem onClick={() => updateStatusMutation.mutate({ id: room.id, status: 'available' })}>
+                              <BedDouble className="h-4 w-4 mr-2" />
+                              Mark Available
+                            </DropdownMenuItem>
+                          )}
+                          
+                          {/* Delete Button (only show if not booked) */}
+                          {room.status !== 'occupied' && room.status !== 'reserved' && (
+                            <>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
+                                className="text-destructive focus:text-destructive focus:bg-destructive/10"
+                                onClick={() => handleDeleteRoom(room.id, room.number)}
+                              >
+                                <Trash className="h-4 w-4 mr-2" />
+                                Delete Room
+                              </DropdownMenuItem>
+                            </>
+                          )}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </TableCell>
                   </TableRow>
                 ))}

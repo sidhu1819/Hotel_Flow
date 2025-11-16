@@ -64,6 +64,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // --- Room Routes ---
   app.get("/api/rooms", async (_req, res) => {
     try {
       const rooms = await storage.getRooms();
@@ -83,6 +84,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // +++ NEW ROUTE: Update Room Status +++
+  app.put("/api/rooms/:id/status", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { status } = req.body;
+      if (!status) {
+        return res.status(400).json({ error: "Status is required" });
+      }
+      // Add validation for status if you want
+      if (!['available', 'occupied', 'reserved', 'maintenance'].includes(status)) {
+        return res.status(400).json({ error: "Invalid status value" });
+      }
+      const room = await storage.updateRoomStatus(id, status);
+      res.json(room);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to update room status" });
+    }
+  });
+
+  // +++ NEW ROUTE: Delete Room +++
+  app.delete("/api/rooms/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const result = await storage.deleteRoom(id);
+      res.json(result);
+    } catch (error: any) {
+      // Return 400 for business logic errors (like "room is booked")
+      res.status(400).json({ error: error.message || "Failed to delete room" });
+    }
+  });
+
+  // --- Guest Routes ---
   app.get("/api/guests", async (_req, res) => {
     try {
       const guests = await storage.getGuests();
@@ -102,6 +135,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // --- Booking Routes ---
   app.get("/api/bookings", async (_req, res) => {
     try {
       const bookings = await storage.getBookings();
@@ -184,6 +218,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // --- Dashboard Routes ---
   app.get("/api/dashboard/stats", async (_req, res) => {
     try {
       const rooms = await storage.getRooms();
@@ -216,6 +251,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // --- Billing Routes ---
   app.get("/api/bills/:bookingId", async (req, res) => {
     try {
       const { bookingId } = req.params;
@@ -226,6 +262,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(bill);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch bill" });
+    }
+  });
+
+  // +++ NEW ROUTE: Complete & Archive Bill +++
+  app.post("/api/bills/:bookingId/complete", async (req, res) => {
+    try {
+      const { bookingId } = req.params;
+      await storage.completeAndArchiveBill(bookingId);
+      res.json({ message: "Bill completed and archived successfully" });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to complete bill" });
     }
   });
 
@@ -302,6 +349,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // --- Service Routes ---
   app.get("/api/services", async (_req, res) => {
     try {
       const services = await storage.getServices();
@@ -310,6 +358,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ error: "Failed to fetch services" });
     }
   });
+
+  // +++ NEW ROUTE: Get Archived Bills +++
+  app.get("/api/archive", async (_req, res) => {
+    try {
+      const archives = await storage.getArchivedBills();
+      res.json(archives);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch archived bills" });
+    }
+  });
+
 
   const httpServer = createServer(app);
   return httpServer;

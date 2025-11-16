@@ -16,6 +16,7 @@ import Guests from "@/pages/guests";
 import Bookings from "@/pages/bookings";
 import CheckIn from "@/pages/checkin";
 import Billing from "@/pages/billing";
+import Data from "@/pages/data"; // +++ 1. IMPORT THE NEW PAGE +++
 import NotFound from "@/pages/not-found";
 
 function ProtectedLayout({ children }: { children: React.ReactNode }) {
@@ -50,6 +51,7 @@ function Router({ isAuthenticated }: { isAuthenticated: boolean }) {
           <Route path="/bookings" component={Bookings} />
           <Route path="/checkin" component={CheckIn} />
           <Route path="/billing" component={Billing} />
+          <Route path="/data" component={Data} /> {/* +++ 2. ADD THIS ROUTE +++ */}
         </>
       ) : (
         <Route path="*" component={() => <Login />} />

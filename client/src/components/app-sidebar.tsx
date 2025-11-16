@@ -7,6 +7,7 @@ import {
   Receipt,
   Settings,
   LogOut,
+  Archive, // +++ 1. ADDED THIS IMPORT +++
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import {
@@ -55,6 +56,12 @@ const menuItems = [
     title: "Billing",
     url: "/billing",
     icon: Receipt,
+  },
+  // +++ 2. ADDED THIS NEW MENU ITEM +++
+  {
+    title: "Data",
+    url: "/data",
+    icon: Archive,
   },
 ];
 

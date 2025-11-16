@@ -23,6 +23,8 @@ import {
   billItems,
   bills,
   users,                // <-- Added
+  archivedBills,        // +++ ADD THIS +++
+  type ArchivedBill,    // +++ ADD THIS +++
 } from "@shared/schema";
 import { and, eq, desc, gte, lt } from "drizzle-orm";
 
@@ -59,6 +61,11 @@ export interface IStorage {
   addBillItem(item: InsertBillItem): Promise<BillItem>;
   getBillItems(bookingId: string): Promise<BillItem[]>;
   updateBill(id: string, updates: Partial<Bill>): Promise<Bill | undefined>;
+
+  // +++ ADD THESE 3 NEW METHODS +++
+  deleteRoom(id: string): Promise<{ id: string }>;
+  completeAndArchiveBill(bookingId: string): Promise<void>;
+  getArchivedBills(): Promise<ArchivedBill[]>;
 }
 
 // Re-implement the IStorage interface using Drizzle
@@ -86,6 +93,20 @@ export class DrizzleStorage implements IStorage {
       .where(eq(rooms.id, id))
       .returning();
     return result[0];
+  }
+
+  // +++ ADD THIS NEW FUNCTION +++
+  async deleteRoom(id: string): Promise<{ id: string }> {
+    const room = await this.getRoom(id);
+    if (!room) {
+      throw new Error("Room not found");
+    }
+    if (room.status === "occupied" || room.status === "reserved") {
+      throw new Error("Cannot delete a room that is currently booked");
+    }
+
+    await db.delete(rooms).where(eq(rooms.id, id));
+    return { id };
   }
 
   // --- User Methods ---
@@ -273,6 +294,41 @@ export class DrizzleStorage implements IStorage {
       .returning();
     return result[0];
   }
+
+  // +++ ADD THESE 2 NEW METHODS +++
+  async completeAndArchiveBill(bookingId: string): Promise<void> {
+    const bill = await this.getBillByBookingId(bookingId);
+    if (!bill || !bill.booking) {
+      throw new Error("Bill or booking not found");
+    }
+
+    const { booking } = bill;
+    const { guest, room } = booking;
+
+    // 1. Create the archive
+    await db.insert(archivedBills).values({
+      guestName: `${guest.firstName} ${guest.lastName}`,
+      phone: guest.phone,
+      roomNumber: room.number,
+      roomType: room.type,
+      checkInDate: booking.checkInDate,
+      checkOutDate: booking.checkOutDate,
+      total: bill.total,
+    });
+
+    // 2. Update room to be available
+    await this.updateRoomStatus(room.id, "available");
+
+    // 3. Delete the bill items, the bill, and the booking
+    // Note: We are NOT deleting the guest, just their booking.
+    await db.delete(billItems).where(eq(billItems.bookingId, bookingId));
+    await db.delete(bills).where(eq(bills.bookingId, bookingId));
+    await db.delete(bookings).where(eq(bookings.id, bookingId));
+  }
+
+  async getArchivedBills(): Promise<ArchivedBill[]> {
+    return db.select().from(archivedBills).orderBy(desc(archivedBills.completedAt));
+  }
 }
 
 // Export an instance of our new DrizzleStorage
@@ -300,6 +356,9 @@ async function seedData() {
   if (existingUsers.length === 0) {
     console.log("Seeding default admin user...");
     await storage.createUser({ username: "admin", password: "admin123", role: "admin" });
+    // You can also add the 'staff' user here if you like
+    console.log("Seeding default staff user...");
+    await storage.createUser({ username: "staff", password: "staff123", role: "staff" });
   }
 }
 
