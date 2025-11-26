@@ -97,7 +97,7 @@ export default function Billing() {
     },
   });
 
-  // +++ 2. ADDED THIS MUTATION +++
+  // +++ 2. MODIFIED THIS MUTATION +++
   const completeBillMutation = useMutation({
     mutationFn: () => {
       if (!bill) throw new Error("No bill selected");
@@ -111,6 +111,7 @@ export default function Billing() {
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
       queryClient.invalidateQueries({ queryKey: ["/api/rooms"] });
       queryClient.invalidateQueries({ queryKey: ["/api/archive"] }); // Refresh the new data page
+      queryClient.invalidateQueries({ queryKey: ["/api/guests"] }); // <--- ADDED for guest deletion fix
       
       toast({ title: "Bill Completed", description: "The bill has been archived and the guest removed." });
       setSelectedBookingId(""); // Reset the UI

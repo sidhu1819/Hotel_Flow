@@ -94,7 +94,13 @@ export default function Bookings() {
     },
   });
 
-  const availableRooms = rooms?.filter(room => room.status === "available");
+  // START OF MODIFIED SECTION
+  const currentNumberOfGuests = form.watch("numberOfGuests"); // Get the current number of guests from the form
+
+  const availableRooms = rooms?.filter(room => 
+    room.status === "available" && room.capacity >= currentNumberOfGuests // Filter by room status AND capacity
+  );
+  // END OF MODIFIED SECTION
 
   const filteredBookings = bookings?.filter((booking) =>
     `${booking.guest?.firstName || ""} ${booking.guest?.lastName || ""}`.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -161,7 +167,7 @@ export default function Bookings() {
                         <SelectContent>
                           {availableRooms?.map((room) => (
                             <SelectItem key={room.id} value={room.id}>
-                              Room {room.number} - {room.type} (${parseFloat(room.pricePerNight).toFixed(2)}/night)
+                              Room {room.number} - {room.type} ({room.capacity} capacity) (${parseFloat(room.pricePerNight).toFixed(2)}/night)
                             </SelectItem>
                           ))}
                         </SelectContent>
