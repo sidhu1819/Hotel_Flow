@@ -1,6 +1,7 @@
 import "dotenv/config";
 import express, { type Request, Response, NextFunction } from "express";
-import { registerRoutes } from "./routes";
+import * as http from "http"; // IMPORTED: Needed to manually create the HTTP server
+import router from "./routes"; // FIX: Import the default exported router instance
 import { setupVite, serveStatic, log } from "./vite";
 
 const app = express();
@@ -10,6 +11,7 @@ declare module 'http' {
     rawBody: unknown
   }
 }
+
 app.use(express.json({
   verify: (req, _res, buf) => {
     req.rawBody = buf;
@@ -48,8 +50,14 @@ app.use((req, res, next) => {
 });
 
 (async () => {
-  const server = await registerRoutes(app);
-
+  // --- FIX START ---
+  // 1. Register API routes using the imported router instance
+  app.use("/api", router); 
+  
+  // 2. Manually create the server instance, since the routes file no longer returns it
+  const server = http.createServer(app); 
+  // --- FIX END ---
+  
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";
