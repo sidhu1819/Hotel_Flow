@@ -608,12 +608,17 @@ router.post("/bills/:bookingId/complete", async (req, res) => {
       // C. Update Room status back to 'available'
       await tx.update(rooms).set({ status: "available" }).where(eq(rooms.id, booking.roomId));
 
-      // D. Update Booking status to 'completed'
-      await tx.update(bookings).set({ status: "completed" }).where(eq(bookings.id, booking.id));
+      // D. Delete bill items first (they reference the booking)
+      await tx.delete(billItems).where(eq(billItems.bookingId, booking.id));
 
-      // E. GUEST DELETION FIX: Delete the guest record
+      // E. Delete the bill (it references the booking)
+      await tx.delete(bills).where(eq(bills.bookingId, booking.id));
+
+      // F. Delete the booking (it references the guest, so must be deleted before guest)
+      await tx.delete(bookings).where(eq(bookings.id, booking.id));
+
+      // G. Finally, delete the guest record (no more references)
       if (booking.guestId) {
-        // Need to ensure guest exists before attempting to delete
         await tx.delete(guests).where(eq(guests.id, booking.guestId));
       }
 
@@ -622,7 +627,11 @@ router.post("/bills/:bookingId/complete", async (req, res) => {
     res.json({ message: "Bill completed, room updated, and guest removed successfully" });
   } catch (error) {
     console.error("Error completing bill and archiving:", error);
-    res.status(500).json({ error: "Failed to complete bill and archive data" });
+    const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+    res.status(500).json({ 
+      error: "Failed to complete bill and archive data",
+      details: errorMessage 
+    });
   }
 });
 
