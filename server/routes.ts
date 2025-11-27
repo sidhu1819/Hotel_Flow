@@ -18,9 +18,9 @@ import {
   insertBillSchema,
   archivedBills,
 } from "@shared/schema";
-import { eq, and, gt, lt, sql, isNull, ne } from "drizzle-orm";
+// FIXED: Added 'desc' and 'gte' to imports for dashboard queries
+import { eq, and, gt, lt, sql, isNull, ne, desc, gte } from "drizzle-orm";
 import { z } from "zod";
-// FIX: Switched to bcryptjs to avoid native compilation issues common in this environment
 import bcrypt from "bcryptjs";
 
 // Utility function for type checking request body
@@ -30,14 +30,12 @@ const validate = <T extends z.ZodSchema>(schema: T) => (req: any, res: any, next
     next();
   } catch (error) {
     if (error instanceof z.ZodError) {
-      // Respond with a 400 status and the validation errors
       return res.status(400).json({ error: "Validation failed", details: error.errors });
     }
     res.status(500).json({ error: "Validation error" });
   }
 };
 
-// Middleware to check if user is authenticated and is admin
 const requireAdmin = async (req: any, res: any, next: any) => {
   try {
     const userId = req.headers["x-user-id"];
@@ -66,7 +64,6 @@ const router = Router();
 
 // --- Auth Routes ---
 
-// Get all users (admin only)
 router.get("/users", requireAdmin, async (req, res) => {
   try {
     const allUsers = await db.select({
@@ -82,7 +79,6 @@ router.get("/users", requireAdmin, async (req, res) => {
   }
 });
 
-// Register new user (admin only)
 router.post("/register", requireAdmin, validate(insertUserSchema), async (req, res) => {
   try {
     const { username, password, role } = req.body;
@@ -93,11 +89,7 @@ router.post("/register", requireAdmin, validate(insertUserSchema), async (req, r
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
-    
-    // FIX: Add .returning() to get the created user object
     const newUser = await db.insert(users).values({ username, password: hashedPassword, role }).returning();
-    
-    // Return the created user object (compatible with frontend's login flow)
     res.status(201).json(newUser[0]); 
   } catch (error) {
     console.error("Registration error:", error);
@@ -114,14 +106,12 @@ router.post("/login", validate(loginSchema), async (req, res) => {
       return res.status(401).json({ error: "Invalid credentials" });
     }
 
-    // FIX: Using bcrypt.compare
     const isMatch = await bcrypt.compare(password, user[0].password);
 
     if (!isMatch) {
       return res.status(401).json({ error: "Invalid credentials" });
     }
 
-    // FIX: Return the User object directly, simplifying the response for the frontend
     res.json({ id: user[0].id, username: user[0].username, role: user[0].role });
   } catch (error) {
     console.error("Login error:", error);
@@ -205,16 +195,14 @@ router.delete("/guests/:id", async (req, res) => {
 
 // --- Booking Routes ---
 
-// Get all bookings with guest and room details
 router.get("/bookings", async (req, res) => {
   try {
     const allBookings = await db.select().from(bookings).leftJoin(guests, eq(bookings.guestId, guests.id)).leftJoin(rooms, eq(bookings.roomId, rooms.id));
     
-    // Map the result to a flat structure
     const formattedBookings = allBookings.map(b => ({
       ...b.bookings,
-      guest: b.guests!, // The ! is safe because guestId is not null
-      room: b.rooms!, // The ! is safe because roomId is not null
+      guest: b.guests!,
+      room: b.rooms!,
     }));
 
     res.json(formattedBookings);
@@ -224,7 +212,29 @@ router.get("/bookings", async (req, res) => {
   }
 });
 
-// Get reserved bookings for check-in
+// FIXED: Added Missing Route for Recent Bookings (for Dashboard)
+router.get("/bookings/recent", async (req, res) => {
+  try {
+    const recentBookings = await db.select()
+      .from(bookings)
+      .leftJoin(guests, eq(bookings.guestId, guests.id))
+      .leftJoin(rooms, eq(bookings.roomId, rooms.id))
+      .orderBy(desc(bookings.createdAt))
+      .limit(5);
+
+    const formattedBookings = recentBookings.map(b => ({
+      ...b.bookings,
+      guest: b.guests!,
+      room: b.rooms!,
+    }));
+
+    res.json(formattedBookings);
+  } catch (error) {
+    console.error("Error fetching recent bookings:", error);
+    res.status(500).json({ error: "Failed to fetch recent bookings" });
+  }
+});
+
 router.get("/bookings/reserved", async (req, res) => {
   try {
     const reservedBookings = await db.select()
@@ -246,7 +256,6 @@ router.get("/bookings/reserved", async (req, res) => {
   }
 });
 
-// Get checked-in bookings
 router.get("/bookings/checked-in", async (req, res) => {
   try {
     const checkedInBookings = await db.select()
@@ -268,7 +277,6 @@ router.get("/bookings/checked-in", async (req, res) => {
   }
 });
 
-// Get checked-out bookings for billing
 router.get("/bookings/checked-out", async (req, res) => {
   try {
     const checkedOutBookings = await db.select()
@@ -290,36 +298,27 @@ router.get("/bookings/checked-out", async (req, res) => {
   }
 });
 
-// Create new booking (MODIFIED for capacity check)
 router.post("/bookings", validate(insertBookingSchema), async (req, res) => {
   try {
     const bookingData = req.body;
     
-    // 1. Get Room Details for capacity check
     const roomDetails = await db.select().from(rooms).where(eq(rooms.id, bookingData.roomId)).limit(1);
     if (roomDetails.length === 0) {
       return res.status(404).json({ error: "Room not found" });
     }
     const room = roomDetails[0];
 
-    // 2. CAPACITY VALIDATION FIX: Check if room capacity is enough for the number of guests
     if (bookingData.numberOfGuests > room.capacity) {
       return res.status(400).json({ error: `Room ${room.number} capacity is ${room.capacity}. Cannot book for ${bookingData.numberOfGuests} guests.` });
     }
 
-    // 3. Check Room Availability (optional but good practice to ensure "available" status)
     if (room.status !== "available") {
       return res.status(400).json({ error: `Room ${room.number} is currently ${room.status}.` });
     }
 
-    // 4. Perform the transaction to create booking and update room status
     const newBooking = await db.transaction(async (tx) => {
-      // Create the new booking
       const createdBooking = await tx.insert(bookings).values(bookingData).returning();
-
-      // Update room status to reserved
       await tx.update(rooms).set({ status: "reserved" }).where(eq(rooms.id, bookingData.roomId));
-
       return createdBooking[0];
     });
 
@@ -330,7 +329,6 @@ router.post("/bookings", validate(insertBookingSchema), async (req, res) => {
   }
 });
 
-// Check-in
 router.post("/bookings/:id/check-in", async (req, res) => {
   try {
     const { id } = req.params;
@@ -340,35 +338,25 @@ router.post("/bookings/:id/check-in", async (req, res) => {
       return res.status(404).json({ error: "Booking not found" });
     }
     
-    // Get original roomId before the transaction starts (SAFER)
     const originalRoomId = bookingToUpdate[0].roomId;
     
-    // Check if a bill already exists for this booking (preventing double check-in/billing issues)
     const existingBill = await db.select().from(bills).where(eq(bills.bookingId, id)).limit(1);
     if (existingBill.length > 0) {
       return res.status(400).json({ error: "Bill already exists for this booking. Cannot check in again." });
     }
 
     const updatedBooking = await db.transaction(async (tx) => {
-      // 1. Update Booking status
       const updated = await tx.update(bookings).set({ status: "checked-in" }).where(eq(bookings.id, id)).returning();
-      
-      // Safety check for update operation
       if (updated.length === 0) {
-          // Changed to return a specific message to indicate the transaction failed to update the row
           throw new Error("Check-in failed: Booking record was not updated.");
       }
-      
-      // 2. Update Room status
       await tx.update(rooms).set({ status: "occupied" }).where(eq(rooms.id, originalRoomId));
-
       return updated[0];
     });
 
     res.json(updatedBooking);
   } catch (error) {
     console.error("Error during check-in:", error);
-    // Return error message from the transaction if it was a specific error
     if (error instanceof Error && error.message.startsWith("Check-in failed:")) {
         return res.status(400).json({ error: error.message });
     }
@@ -376,7 +364,6 @@ router.post("/bookings/:id/check-in", async (req, res) => {
   }
 });
 
-// Check-out
 router.post("/bookings/:id/check-out", async (req, res) => {
   try {
     const { id } = req.params;
@@ -387,11 +374,7 @@ router.post("/bookings/:id/check-out", async (req, res) => {
     }
 
     const updatedBooking = await db.transaction(async (tx) => {
-      // 1. Update Booking status to checked-out
       const updated = await tx.update(bookings).set({ status: "checked-out" }).where(eq(bookings.id, id)).returning();
-      
-      // We do NOT update the room status yet (it stays 'occupied') until the bill is fully paid/completed.
-
       return updated[0];
     });
 
@@ -436,13 +419,11 @@ router.delete("/services/:id", async (req, res) => {
 
 // --- Bill Routes ---
 
-// Helper function to calculate bill totals
 const calculateBill = (items: z.infer<typeof insertBillItemSchema>[]): { subtotal: string, taxAmount: string, total: string } => {
-  const taxRate = 0.10; // Fixed 10% tax rate as per schema default
+  const taxRate = 0.10;
   let subtotal = 0;
 
   for (const item of items) {
-    // Ensure amount is parsed correctly as it is stored as a string numeric in schema
     subtotal += parseFloat(item.amount) * item.quantity;
   }
 
@@ -456,59 +437,49 @@ const calculateBill = (items: z.infer<typeof insertBillItemSchema>[]): { subtota
   };
 };
 
-// Generate initial bill
 router.post("/bills/generate", validate(z.object({ bookingId: z.string() })), async (req, res) => {
   try {
     const { bookingId } = req.body;
 
-    // 1. Check if bill already exists
     const existingBill = await db.select().from(bills).where(eq(bills.bookingId, bookingId)).limit(1);
     if (existingBill.length > 0) {
       return res.status(400).json({ error: "Bill already exists for this booking" });
     }
 
-    // 2. Get Booking details
     const bookingDetails = await db.select().from(bookings).where(eq(bookings.id, bookingId)).limit(1);
     if (bookingDetails.length === 0) {
       return res.status(404).json({ error: "Booking not found" });
     }
     const booking = bookingDetails[0];
 
-    // 3. Get Room Price/Details
     const roomDetails = await db.select().from(rooms).where(eq(rooms.id, booking.roomId)).limit(1);
     if (roomDetails.length === 0) {
       return res.status(500).json({ error: "Room details missing" });
     }
     const room = roomDetails[0];
     
-    // Calculate number of nights
     const checkInDate = new Date(booking.checkInDate);
     const checkOutDate = new Date(booking.checkOutDate);
     const diffTime = Math.abs(checkOutDate.getTime() - checkInDate.getTime());
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    const numberOfNights = diffDays === 0 ? 1 : diffDays; // Ensure at least 1 night charge
+    const numberOfNights = diffDays === 0 ? 1 : diffDays;
 
     const roomChargeItem: z.infer<typeof insertBillItemSchema> = {
       bookingId: booking.id,
       description: `${room.type} Room Charge (${numberOfNights} nights)`,
-      amount: room.pricePerNight, // Price per night is stored as a string numeric in schema
+      amount: room.pricePerNight,
       quantity: numberOfNights,
       category: "room",
     };
 
-    // 4. Perform the transaction
     const initialBill = await db.transaction(async (tx) => {
-      // Insert room charge item
       await tx.insert(billItems).values(roomChargeItem);
-
-      // Calculate totals for the bill
       const totals = calculateBill([roomChargeItem]);
 
-      // Insert the new bill
       const newBill = await tx.insert(bills).values({
         bookingId: booking.id,
         subtotal: totals.subtotal,
-        taxRate: "10.00", // Default tax rate
+        taxRate: "10.00",
         taxAmount: totals.taxAmount,
         total: totals.total,
         isPaid: false,
@@ -524,12 +495,10 @@ router.post("/bills/generate", validate(z.object({ bookingId: z.string() })), as
   }
 });
 
-// Add item to an existing bill
 router.post("/bills/add-item", validate(insertBillItemSchema.omit({ id: true })), async (req, res) => {
   try {
     const newItem = req.body;
     
-    // 1. Get current bill items and bill
     const currentItems = await db.select().from(billItems).where(eq(billItems.bookingId, newItem.bookingId));
     const currentBill = await db.select().from(bills).where(eq(bills.bookingId, newItem.bookingId)).limit(1);
 
@@ -537,17 +506,11 @@ router.post("/bills/add-item", validate(insertBillItemSchema.omit({ id: true }))
       return res.status(404).json({ error: "Bill not found" });
     }
 
-    // 2. Perform transaction to add item and recalculate bill
     const updatedBill = await db.transaction(async (tx) => {
-      // Insert new item
       await tx.insert(billItems).values(newItem);
-
-      // Recalculate totals
-      // We pass all items including the new one
       const allItems = [...currentItems, newItem];
       const totals = calculateBill(allItems);
 
-      // Update bill totals
       const updated = await tx.update(bills).set({
         subtotal: totals.subtotal,
         taxAmount: totals.taxAmount,
@@ -564,19 +527,16 @@ router.post("/bills/add-item", validate(insertBillItemSchema.omit({ id: true }))
   }
 });
 
-// Get bill details
 router.get("/bills/:bookingId", async (req, res) => {
   try {
     const { bookingId } = req.params;
     
-    // 1. Get bill
     const billDetails = await db.select().from(bills).where(eq(bills.bookingId, bookingId)).limit(1);
     if (billDetails.length === 0) {
       return res.json(null);
     }
     const bill = billDetails[0];
 
-    // 2. Get booking, guest, and room details (for nesting)
     const bookingDetails = await db.select().from(bookings)
       .leftJoin(guests, eq(bookings.guestId, guests.id))
       .leftJoin(rooms, eq(bookings.roomId, rooms.id))
@@ -587,11 +547,8 @@ router.get("/bills/:bookingId", async (req, res) => {
     }
 
     const { bookings: booking, guests: guest, rooms: room } = bookingDetails[0];
-
-    // 3. Get bill items
     const items = await db.select().from(billItems).where(eq(billItems.bookingId, bookingId));
 
-    // 4. Construct response
     const billWithDetails = {
       ...bill,
       booking: { ...booking, guest, room },
@@ -605,12 +562,10 @@ router.get("/bills/:bookingId", async (req, res) => {
   }
 });
 
-// Complete bill (FINAL PAYMENT & CLEANUP)
 router.post("/bills/:bookingId/complete", async (req, res) => {
   try {
     const { bookingId } = req.params;
 
-    // 1. Get booking details to find guest and room
     const bookingDetails = await db.select().from(bookings)
       .leftJoin(guests, eq(bookings.guestId, guests.id))
       .leftJoin(rooms, eq(bookings.roomId, rooms.id))
@@ -628,11 +583,7 @@ router.post("/bills/:bookingId/complete", async (req, res) => {
     }
     const bill = billDetails[0];
 
-
-    // 2. Perform the full cleanup transaction
     await db.transaction(async (tx) => {
-      // A. Archive the bill data
-      // MODIFIED: Added safety checks for nullable guest/room data to prevent insertion errors.
       await tx.insert(archivedBills).values({
         guestName: `${guest?.firstName ?? ''} ${guest?.lastName ?? ''}`.trim() || 'N/A',
         phone: guest?.phone || 'N/A',
@@ -644,26 +595,15 @@ router.post("/bills/:bookingId/complete", async (req, res) => {
         completedAt: new Date(),
       });
       
-      // B. Mark the bill as paid (isPaid: true)
       await tx.update(bills).set({ isPaid: true }).where(eq(bills.id, bill.id));
-
-      // C. Update Room status back to 'available'
       await tx.update(rooms).set({ status: "available" }).where(eq(rooms.id, booking.roomId));
-
-      // D. Delete bill items first (they reference the booking)
       await tx.delete(billItems).where(eq(billItems.bookingId, booking.id));
-
-      // E. Delete the bill (it references the booking)
       await tx.delete(bills).where(eq(bills.bookingId, booking.id));
-
-      // F. Delete the booking (it references the guest, so must be deleted before guest)
       await tx.delete(bookings).where(eq(bookings.id, booking.id));
 
-      // G. Finally, delete the guest record (no more references)
       if (booking.guestId) {
         await tx.delete(guests).where(eq(guests.id, booking.guestId));
       }
-
     });
 
     res.json({ message: "Bill completed, room updated, and guest removed successfully" });
@@ -687,17 +627,15 @@ router.get("/dashboard/stats", async (req, res) => {
     const reservedBookings = await db.select({ count: sql<number>`count(*)` }).from(bookings).where(eq(bookings.status, "reserved"));
     const totalGuests = await db.select({ count: sql<number>`count(*)` }).from(guests);
 
-    // Get current month's revenue (from archived/completed bills)
     const startOfMonth = new Date();
     startOfMonth.setDate(1);
     startOfMonth.setHours(0, 0, 0, 0);
 
     const revenueResult = await db.select({
-      total: sql<string>`sum(total)`, // total is a numeric/string type
+      total: sql<string>`sum(total)`,
     }).from(archivedBills).where(gt(archivedBills.completedAt, startOfMonth));
 
     const revenue = parseFloat(revenueResult[0].total || "0").toFixed(2);
-
 
     res.json({
       totalRooms: totalRooms[0].count,
@@ -709,6 +647,38 @@ router.get("/dashboard/stats", async (req, res) => {
   } catch (error) {
     console.error("Error fetching dashboard stats:", error);
     res.status(500).json({ error: "Failed to fetch dashboard stats" });
+  }
+});
+
+// FIXED: Added Missing Route for Today's Check-ins (for Dashboard)
+router.get("/dashboard/today-checkins", async (req, res) => {
+  try {
+    const startOfDay = new Date();
+    startOfDay.setHours(0, 0, 0, 0);
+    
+    const endOfDay = new Date(startOfDay);
+    endOfDay.setDate(endOfDay.getDate() + 1);
+
+    const todayCheckIns = await db.select()
+      .from(bookings)
+      .leftJoin(guests, eq(bookings.guestId, guests.id))
+      .leftJoin(rooms, eq(bookings.roomId, rooms.id))
+      .where(and(
+        eq(bookings.status, "reserved"),
+        gte(bookings.checkInDate, startOfDay),
+        lt(bookings.checkInDate, endOfDay)
+      ));
+
+    const formattedBookings = todayCheckIns.map(b => ({
+      ...b.bookings,
+      guest: b.guests!,
+      room: b.rooms!,
+    }));
+
+    res.json(formattedBookings);
+  } catch (error) {
+    console.error("Error fetching today's check-ins:", error);
+    res.status(500).json({ error: "Failed to fetch today's check-ins" });
   }
 });
 
@@ -727,24 +697,20 @@ router.get("/archive", async (req, res) => {
 
 // --- User Management Routes (Admin Only) ---
 
-// Delete user
 router.delete("/users/:id", requireAdmin, async (req, res) => {
   try {
     const { id } = req.params;
     const currentUserId = req.user.id;
 
-    // Prevent admin from deleting themselves
     if (id === currentUserId) {
       return res.status(400).json({ error: "Cannot delete your own account" });
     }
 
-    // Check if user exists
     const userToDelete = await db.select().from(users).where(eq(users.id, id)).limit(1);
     if (userToDelete.length === 0) {
       return res.status(404).json({ error: "User not found" });
     }
 
-    // Delete the user
     await db.delete(users).where(eq(users.id, id));
     res.status(204).send();
   } catch (error) {

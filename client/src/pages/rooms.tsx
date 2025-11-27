@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Plus, Search, BedDouble, MoreHorizontal, Trash, Wrench } from "lucide-react"; // +++ 1. ADDED ICONS +++
+import { Plus, Search, BedDouble, MoreHorizontal, Trash, Wrench } from "lucide-react"; 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -36,7 +36,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-// +++ 2. ADDED DROPDOWN IMPORTS +++
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -89,10 +88,11 @@ export default function Rooms() {
     },
   });
 
-  // +++ 3. ADDED THESE MUTATIONS +++
+  // FIXED: Changed endpoint from /api/rooms/${id}/status to /api/rooms/${id}
+  // The backend uses a generic PUT for updates
   const updateStatusMutation = useMutation({
     mutationFn: ({ id, status }: { id: string, status: string }) =>
-      apiRequest("PUT", `/api/rooms/${id}/status`, { status }),
+      apiRequest("PUT", `/api/rooms/${id}`, { status }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/rooms"] });
       toast({ title: "Room status updated" });
@@ -114,8 +114,6 @@ export default function Rooms() {
   });
 
   const handleDeleteRoom = (id: string, number: string) => {
-    // NOTE: Switched to window.confirm as alert() is not available.
-    // For a better experience, you could replace this with shadcn's <AlertDialog>
     if (window.confirm(`Are you sure you want to permanently delete Room ${number}? This cannot be undone.`)) {
       deleteRoomMutation.mutate(id);
     }
@@ -290,7 +288,6 @@ export default function Rooms() {
                   <TableHead>Capacity</TableHead>
                   <TableHead>Price/Night</TableHead>
                   <TableHead>Status</TableHead>
-                  {/* +++ 4. ADDED ACTIONS HEADER +++ */}
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -309,7 +306,6 @@ export default function Rooms() {
                     <TableCell>
                       <StatusBadge status={room.status as any} />
                     </TableCell>
-                    {/* +++ 5. ADDED ACTIONS CELL +++ */}
                     <TableCell className="text-right">
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
@@ -324,14 +320,12 @@ export default function Rooms() {
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
                           <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                          {/* Maintenance Button */}
                           {room.status === 'available' && (
                             <DropdownMenuItem onClick={() => updateStatusMutation.mutate({ id: room.id, status: 'maintenance' })}>
                               <Wrench className="h-4 w-4 mr-2" />
                               Mark Maintenance
                             </DropdownMenuItem>
                           )}
-                          {/* Available Button */}
                           {room.status === 'maintenance' && (
                             <DropdownMenuItem onClick={() => updateStatusMutation.mutate({ id: room.id, status: 'available' })}>
                               <BedDouble className="h-4 w-4 mr-2" />
@@ -339,7 +333,6 @@ export default function Rooms() {
                             </DropdownMenuItem>
                           )}
                           
-                          {/* Delete Button (only show if not booked) */}
                           {room.status !== 'occupied' && room.status !== 'reserved' && (
                             <>
                               <DropdownMenuSeparator />
