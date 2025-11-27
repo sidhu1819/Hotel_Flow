@@ -20,7 +20,8 @@ import {
 } from "@shared/schema";
 import { eq, and, gt, lt, sql, isNull, ne } from "drizzle-orm";
 import { z } from "zod";
-import bcrypt from "bcrypt";
+// FIX: Switched to bcryptjs to avoid native compilation issues common in this environment
+import bcrypt from "bcryptjs";
 
 // Utility function for type checking request body
 const validate = <T extends z.ZodSchema>(schema: T) => (req: any, res: any, next: any) => {
@@ -29,7 +30,8 @@ const validate = <T extends z.ZodSchema>(schema: T) => (req: any, res: any, next
     next();
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return res.status(400).json({ errors: error.errors });
+      // Respond with a 400 status and the validation errors
+      return res.status(400).json({ error: "Validation failed", details: error.errors });
     }
     res.status(500).json({ error: "Validation error" });
   }
@@ -49,8 +51,12 @@ router.post("/register", validate(insertUserSchema), async (req, res) => {
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
-    await db.insert(users).values({ username, password: hashedPassword, role });
-    res.status(201).json({ message: "User registered successfully" });
+    
+    // FIX: Add .returning() to get the created user object
+    const newUser = await db.insert(users).values({ username, password: hashedPassword, role }).returning();
+    
+    // Return the created user object (compatible with frontend's login flow)
+    res.status(201).json(newUser[0]); 
   } catch (error) {
     console.error("Registration error:", error);
     res.status(500).json({ error: "Internal server error" });
@@ -66,15 +72,15 @@ router.post("/login", validate(loginSchema), async (req, res) => {
       return res.status(401).json({ error: "Invalid credentials" });
     }
 
+    // FIX: Using bcrypt.compare
     const isMatch = await bcrypt.compare(password, user[0].password);
 
     if (!isMatch) {
       return res.status(401).json({ error: "Invalid credentials" });
     }
 
-    // In a real application, you would generate and return a JWT here.
-    // For this simple example, we return success and user role.
-    res.json({ message: "Login successful", user: { id: user[0].id, username: user[0].username, role: user[0].role } });
+    // FIX: Return the User object directly, simplifying the response for the frontend
+    res.json({ id: user[0].id, username: user[0].username, role: user[0].role });
   } catch (error) {
     console.error("Login error:", error);
     res.status(500).json({ error: "Internal server error" });
@@ -268,7 +274,6 @@ router.post("/bookings/:id/check-in", async (req, res) => {
       }
       
       // 2. Update Room status
-      // FIX FOR LINE 431: Use the safely captured originalRoomId instead of relying on updated[0].roomId
       await tx.update(rooms).set({ status: "occupied" }).where(eq(rooms.id, originalRoomId));
 
       return updated[0];
@@ -351,6 +356,7 @@ const calculateBill = (items: z.infer<typeof insertBillItemSchema>[]): { subtota
   let subtotal = 0;
 
   for (const item of items) {
+    // Ensure amount is parsed correctly as it is stored as a string numeric in schema
     subtotal += parseFloat(item.amount) * item.quantity;
   }
 
@@ -399,7 +405,7 @@ router.post("/bills/generate", validate(z.object({ bookingId: z.string() })), as
     const roomChargeItem: z.infer<typeof insertBillItemSchema> = {
       bookingId: booking.id,
       description: `${room.type} Room Charge (${numberOfNights} nights)`,
-      amount: room.pricePerNight, // Price per night is stored as a string in schema
+      amount: room.pricePerNight, // Price per night is stored as a string numeric in schema
       quantity: numberOfNights,
       category: "room",
     };
@@ -416,6 +422,7 @@ router.post("/bills/generate", validate(z.object({ bookingId: z.string() })), as
       const newBill = await tx.insert(bills).values({
         bookingId: booking.id,
         subtotal: totals.subtotal,
+        taxRate: "10.00", // Default tax rate
         taxAmount: totals.taxAmount,
         total: totals.total,
         isPaid: false,
@@ -450,6 +457,7 @@ router.post("/bills/add-item", validate(insertBillItemSchema.omit({ id: true }))
       await tx.insert(billItems).values(newItem);
 
       // Recalculate totals
+      // We pass all items including the new one
       const allItems = [...currentItems, newItem];
       const totals = calculateBill(allItems);
 
