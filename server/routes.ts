@@ -182,6 +182,50 @@ router.get("/bookings", async (req, res) => {
   }
 });
 
+// Get reserved bookings for check-in
+router.get("/bookings/reserved", async (req, res) => {
+  try {
+    const reservedBookings = await db.select()
+      .from(bookings)
+      .leftJoin(guests, eq(bookings.guestId, guests.id))
+      .leftJoin(rooms, eq(bookings.roomId, rooms.id))
+      .where(eq(bookings.status, "reserved"));
+
+    const formattedBookings = reservedBookings.map(b => ({
+      ...b.bookings,
+      guest: b.guests!,
+      room: b.rooms!,
+    }));
+
+    res.json(formattedBookings);
+  } catch (error) {
+    console.error("Error fetching reserved bookings:", error);
+    res.status(500).json({ error: "Failed to fetch reserved bookings" });
+  }
+});
+
+// Get checked-in bookings
+router.get("/bookings/checked-in", async (req, res) => {
+  try {
+    const checkedInBookings = await db.select()
+      .from(bookings)
+      .leftJoin(guests, eq(bookings.guestId, guests.id))
+      .leftJoin(rooms, eq(bookings.roomId, rooms.id))
+      .where(eq(bookings.status, "checked-in"));
+
+    const formattedBookings = checkedInBookings.map(b => ({
+      ...b.bookings,
+      guest: b.guests!,
+      room: b.rooms!,
+    }));
+
+    res.json(formattedBookings);
+  } catch (error) {
+    console.error("Error fetching checked-in bookings:", error);
+    res.status(500).json({ error: "Failed to fetch checked-in bookings" });
+  }
+});
+
 // Get checked-out bookings for billing
 router.get("/bookings/checked-out", async (req, res) => {
   try {

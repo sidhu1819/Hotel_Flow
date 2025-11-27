@@ -27,9 +27,11 @@ export default function CheckIn() {
   });
 
   const checkInMutation = useMutation({
-    mutationFn: (bookingId: string) => apiRequest("POST", `/api/bookings/${bookingId}/checkin`, {}),
+    mutationFn: (bookingId: string) => apiRequest("POST", `/api/bookings/${bookingId}/check-in`, {}),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/bookings"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/bookings/reserved"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/bookings/checked-in"] });
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
       toast({ title: "Guest checked in successfully" });
     },
@@ -39,9 +41,11 @@ export default function CheckIn() {
   });
 
   const checkOutMutation = useMutation({
-    mutationFn: (bookingId: string) => apiRequest("POST", `/api/bookings/${bookingId}/checkout`, {}),
+    mutationFn: (bookingId: string) => apiRequest("POST", `/api/bookings/${bookingId}/check-out`, {}),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/bookings"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/bookings/checked-in"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/bookings/checked-out"] });
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
       toast({ title: "Guest checked out successfully" });
     },
