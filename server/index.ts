@@ -3,6 +3,7 @@ import express, { type Request, Response, NextFunction } from "express";
 import * as http from "http"; // IMPORTED: Needed to manually create the HTTP server
 import router from "./routes"; // FIX: Import the default exported router instance
 import { setupVite, serveStatic, log } from "./vite";
+import { testConnection } from "./db";
 
 const app = express();
 
@@ -50,6 +51,14 @@ app.use((req, res, next) => {
 });
 
 (async () => {
+  // Test database connection before starting server
+  try {
+    await testConnection();
+  } catch (error) {
+    console.error("Failed to connect to database. Server will not start.");
+    process.exit(1);
+  }
+
   // --- FIX START ---
   // 1. Register API routes using the imported router instance
   app.use("/api", router); 

@@ -10,17 +10,23 @@ if (!connectionString) {
 }
 
 // 1. Configure the PostgreSQL Pool
-// CRITICAL FIX: For external databases like Neon, 'ssl: true' is mandatory.
+// Use SSL for hosted providers (Neon, Supabase, etc.), but disable for local dev
+const shouldUseSSL =
+  !/localhost|127\.0\.0\.1/i.test(connectionString) &&
+  process.env.DATABASE_SSL !== "false";
+
 const pool = new Pool({
-  connectionString: connectionString,
-  ssl: true, // This tells the driver to use SSL/TLS encryption
+  connectionString,
+  ssl: shouldUseSSL
+    ? { rejectUnauthorized: false }
+    : undefined,
 });
 
 // 2. Create the Drizzle DB instance
 export const db = drizzle(pool, { schema });
 
 // Optional: Add a connection test to ensure it's working (good for debugging)
-async function testConnection() {
+export async function testConnection() {
     try {
         await pool.query('SELECT NOW()');
         console.log("Database connected successfully!");
@@ -30,6 +36,3 @@ async function testConnection() {
         throw new Error("Failed to connect to the database. Check logs.");
     }
 }
-
-// Ensure connection is tested on server startup
-testConnection();
