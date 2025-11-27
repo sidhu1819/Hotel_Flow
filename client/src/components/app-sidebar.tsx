@@ -7,7 +7,8 @@ import {
   Receipt,
   Settings,
   LogOut,
-  Archive, // +++ 1. ADDED THIS IMPORT +++
+  Archive,
+  Shield,
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import {
@@ -57,11 +58,18 @@ const menuItems = [
     url: "/billing",
     icon: Receipt,
   },
-  // +++ 2. ADDED THIS NEW MENU ITEM +++
   {
     title: "Data",
     url: "/data",
     icon: Archive,
+  },
+];
+
+const adminMenuItems = [
+  {
+    title: "Agatra",
+    url: "/agatra",
+    icon: Shield,
   },
 ];
 
@@ -93,6 +101,20 @@ export function AppSidebar() {
           <SidebarGroupContent>
             <SidebarMenu>
               {menuItems.map((item) => (
+                <SidebarMenuItem key={item.title}>
+                  <SidebarMenuButton
+                    asChild
+                    isActive={location === item.url}
+                    data-testid={`link-${item.title.toLowerCase().replace(/\s+/g, '-')}`}
+                  >
+                    <Link href={item.url}>
+                      <item.icon className="h-4 w-4" />
+                      <span>{item.title}</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+              {user?.role === "admin" && adminMenuItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton
                     asChild

@@ -9,14 +9,14 @@ import { ThemeProvider } from "@/components/theme-provider";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { AuthProvider, useAuth } from "@/hooks/use-auth";
 import Login from "@/pages/login";
-import Register from "@/pages/register";
 import Dashboard from "@/pages/dashboard";
 import Rooms from "@/pages/rooms";
 import Guests from "@/pages/guests";
 import Bookings from "@/pages/bookings";
 import CheckIn from "@/pages/checkin";
 import Billing from "@/pages/billing";
-import Data from "@/pages/data"; // +++ 1. IMPORT THE NEW PAGE +++
+import Data from "@/pages/data";
+import Agatra from "@/pages/agatra";
 import NotFound from "@/pages/not-found";
 
 function ProtectedLayout({ children }: { children: React.ReactNode }) {
@@ -38,11 +38,31 @@ function ProtectedLayout({ children }: { children: React.ReactNode }) {
   );
 }
 
+function AdminRoute({ component: Component }: { component: React.ComponentType }) {
+  const { user } = useAuth();
+  
+  if (!user) {
+    return <Login />;
+  }
+  
+  if (user.role !== "admin") {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold mb-2">403 Forbidden</h1>
+          <p className="text-muted-foreground">You don't have permission to access this page.</p>
+        </div>
+      </div>
+    );
+  }
+  
+  return <Component />;
+}
+
 function Router({ isAuthenticated }: { isAuthenticated: boolean }) {
   return (
     <Switch>
       <Route path="/login" component={Login} />
-      <Route path="/register" component={Register} />
       {isAuthenticated ? (
         <>
           <Route path="/" component={Dashboard} />
@@ -51,7 +71,8 @@ function Router({ isAuthenticated }: { isAuthenticated: boolean }) {
           <Route path="/bookings" component={Bookings} />
           <Route path="/checkin" component={CheckIn} />
           <Route path="/billing" component={Billing} />
-          <Route path="/data" component={Data} /> {/* +++ 2. ADD THIS ROUTE +++ */}
+          <Route path="/data" component={Data} />
+          <Route path="/agatra" component={() => <AdminRoute component={Agatra} />} />
         </>
       ) : (
         <Route path="*" component={() => <Login />} />

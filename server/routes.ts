@@ -37,11 +37,53 @@ const validate = <T extends z.ZodSchema>(schema: T) => (req: any, res: any, next
   }
 };
 
+// Middleware to check if user is authenticated and is admin
+const requireAdmin = async (req: any, res: any, next: any) => {
+  try {
+    const userId = req.headers["x-user-id"];
+    if (!userId) {
+      return res.status(401).json({ error: "Authentication required" });
+    }
+
+    const user = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+    if (user.length === 0) {
+      return res.status(401).json({ error: "Invalid user" });
+    }
+
+    if (user[0].role !== "admin") {
+      return res.status(403).json({ error: "Admin access required" });
+    }
+
+    req.user = user[0];
+    next();
+  } catch (error) {
+    console.error("Admin check error:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};
+
 const router = Router();
 
 // --- Auth Routes ---
 
-router.post("/register", validate(insertUserSchema), async (req, res) => {
+// Get all users (admin only)
+router.get("/users", requireAdmin, async (req, res) => {
+  try {
+    const allUsers = await db.select({
+      id: users.id,
+      username: users.username,
+      role: users.role,
+      createdAt: users.createdAt,
+    }).from(users);
+    res.json(allUsers);
+  } catch (error) {
+    console.error("Error fetching users:", error);
+    res.status(500).json({ error: "Failed to fetch users" });
+  }
+});
+
+// Register new user (admin only)
+router.post("/register", requireAdmin, validate(insertUserSchema), async (req, res) => {
   try {
     const { username, password, role } = req.body;
     const existingUser = await db.select().from(users).where(eq(users.username, username));
@@ -680,6 +722,34 @@ router.get("/archive", async (req, res) => {
   } catch (error) {
     console.error("Error fetching archived data:", error);
     res.status(500).json({ error: "Failed to fetch archived data" });
+  }
+});
+
+// --- User Management Routes (Admin Only) ---
+
+// Delete user
+router.delete("/users/:id", requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const currentUserId = req.user.id;
+
+    // Prevent admin from deleting themselves
+    if (id === currentUserId) {
+      return res.status(400).json({ error: "Cannot delete your own account" });
+    }
+
+    // Check if user exists
+    const userToDelete = await db.select().from(users).where(eq(users.id, id)).limit(1);
+    if (userToDelete.length === 0) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    // Delete the user
+    await db.delete(users).where(eq(users.id, id));
+    res.status(204).send();
+  } catch (error) {
+    console.error("Error deleting user:", error);
+    res.status(500).json({ error: "Failed to delete user" });
   }
 });
 

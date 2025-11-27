@@ -4,8 +4,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
+import { Info, Copy, Check } from "lucide-react";
 
 export default function Login() {
   const [, navigate] = useLocation();
@@ -14,6 +16,7 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [copied, setCopied] = useState<string | null>(null);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -57,6 +60,13 @@ export default function Login() {
     }
   };
 
+  const copyToClipboard = (text: string, label: string) => {
+    navigator.clipboard.writeText(text);
+    setCopied(label);
+    toast({ title: "Copied!", description: `${label} copied to clipboard` });
+    setTimeout(() => setCopied(null), 2000);
+  };
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 to-slate-800 p-4">
       <Card className="w-full max-w-md">
@@ -64,7 +74,41 @@ export default function Login() {
           <CardTitle className="text-2xl">HotelFlow</CardTitle>
           <CardDescription>Hotel Management System</CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
+          <Alert>
+            <Info className="h-4 w-4" />
+            <AlertTitle>Demo Credentials</AlertTitle>
+            <AlertDescription className="space-y-2 mt-2">
+              <div className="flex items-center justify-between p-2 bg-muted rounded">
+                <div>
+                  <p className="font-semibold text-sm">Admin</p>
+                  <p className="text-xs text-muted-foreground">Username: admin | Password: admin123</p>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => copyToClipboard("admin", "Admin username")}
+                  className="h-8 w-8 p-0"
+                >
+                  {copied === "Admin username" ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                </Button>
+              </div>
+              <div className="flex items-center justify-between p-2 bg-muted rounded">
+                <div>
+                  <p className="font-semibold text-sm">Staff</p>
+                  <p className="text-xs text-muted-foreground">Username: staff | Password: staff123</p>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => copyToClipboard("staff", "Staff username")}
+                  className="h-8 w-8 p-0"
+                >
+                  {copied === "Staff username" ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                </Button>
+              </div>
+            </AlertDescription>
+          </Alert>
           <form onSubmit={handleLogin} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="username">Username</Label>
@@ -98,10 +142,6 @@ export default function Login() {
               {loading ? "Logging in..." : "Login"}
             </Button>
           </form>
-          
-          <div className="mt-4 text-sm text-center">
-            <a href="/register" className="text-primary">Don't have an account? Register</a>
-          </div>
         </CardContent>
       </Card>
     </div>
